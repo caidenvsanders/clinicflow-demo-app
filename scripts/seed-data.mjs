@@ -368,6 +368,9 @@ const dayOrder = [
   "Saturday"
 ];
 
+const DEMO_TODAY = new Date("2026-05-01T12:00:00");
+const SEEDED_ACTIVITY_CUTOFF = new Date("2026-04-30T23:59:00");
+
 function addDays(date, days) {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
@@ -389,9 +392,16 @@ function timestampFor(date, time, daysOffset = 0) {
 }
 
 function normalizeToday() {
-  const today = new Date();
+  const today = new Date(DEMO_TODAY);
   today.setHours(12, 0, 0, 0);
   return today;
+}
+
+function clampBeforeSeedCutoff(stamp, minutesBeforeCutoff = 0) {
+  if (stamp.getTime() <= SEEDED_ACTIVITY_CUTOFF.getTime()) {
+    return stamp;
+  }
+  return new Date(SEEDED_ACTIVITY_CUTOFF.getTime() - minutesBeforeCutoff * 60 * 1000);
 }
 
 function nextDateForDay(dayName, occurrence = 0, fromDate = normalizeToday()) {
@@ -589,8 +599,13 @@ function buildSeedData() {
     slots.push({ start: startMinutes, end: endMinutes });
     slotTracker.set(trackerKey, slots);
 
+    const appointmentIdValue = appointmentId++;
+    const createdAt = clampBeforeSeedCutoff(
+      timestampFor(appointmentDate, normalizedStart, -Math.max(createdDaysBefore, 1)),
+      appointmentIdValue * 17 + 45
+    );
     const appointment = {
-      appointment_id: appointmentId++,
+      appointment_id: appointmentIdValue,
       patient_id: patient.patient_id,
       provider_id: provider.provider_id,
       department_id: provider.department_id,
@@ -600,7 +615,7 @@ function buildSeedData() {
       end_time: normalizedEnd,
       reason,
       notes,
-      created_at: timestampFor(appointmentDate, normalizedStart, -Math.max(createdDaysBefore, 1))
+      created_at: createdAt
     };
     appointments.push(appointment);
 
@@ -611,22 +626,25 @@ function buildSeedData() {
       changed_by: createdBy.user_id,
       old_status_id: null,
       new_status_id: statusIds.Scheduled,
-      change_timestamp: timestampFor(appointmentDate, normalizedStart, -Math.max(createdDaysBefore, 1)),
+      change_timestamp: createdAt,
       change_reason: change_reason ?? "Appointment created for local demo workflow."
     });
 
     if (status_name !== "Scheduled") {
       const statusChangedBy = userByKey[statusChangedByKey ?? createdByKey];
+      const statusChangeTimestamp = clampBeforeSeedCutoff(
+        mode === "future"
+          ? timestampFor(appointmentDate, normalizedStart, -1)
+          : timestampFor(appointmentDate, normalizedEnd, 0),
+        appointment.appointment_id * 17 + 5
+      );
       auditLogs.push({
         log_id: logId++,
         appointment_id: appointment.appointment_id,
         changed_by: statusChangedBy.user_id,
         old_status_id: statusIds.Scheduled,
         new_status_id: statusIds[status_name],
-        change_timestamp:
-          mode === "future"
-            ? timestampFor(appointmentDate, normalizedStart, -1)
-            : timestampFor(appointmentDate, normalizedEnd, 0),
+        change_timestamp: statusChangeTimestamp,
         change_reason:
           change_reason ??
           (status_name === "Completed"

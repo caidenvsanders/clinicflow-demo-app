@@ -18,7 +18,7 @@ CREATE TABLE "USER" (
   phone VARCHAR(20),
   role VARCHAR(20) NOT NULL
     CHECK (role IN ('patient', 'provider', 'admin')),
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Los_Angeles')
 );
 
 CREATE TABLE PATIENT (
@@ -76,7 +76,7 @@ CREATE TABLE APPOINTMENT (
   end_time TIME NOT NULL,
   reason VARCHAR(255),
   notes TEXT,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Los_Angeles'),
   CHECK (end_time > start_time),
   FOREIGN KEY (patient_id)
     REFERENCES PATIENT(patient_id)
@@ -124,7 +124,7 @@ CREATE TABLE APPOINTMENT_AUDIT_LOG (
   changed_by INT NOT NULL,
   old_status_id INT,
   new_status_id INT,
-  change_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  change_timestamp TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Los_Angeles'),
   change_reason VARCHAR(255),
   FOREIGN KEY (appointment_id)
     REFERENCES APPOINTMENT(appointment_id)
@@ -150,6 +150,7 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
   appointment_starts TIMESTAMP;
+  clinic_now TIMESTAMP := CURRENT_TIMESTAMP AT TIME ZONE 'America/Los_Angeles';
 BEGIN
   IF current_setting('clinicflow.seed_mode', true) = 'on' THEN
     RETURN NEW;
@@ -164,7 +165,7 @@ BEGIN
      OR NEW.start_time IS DISTINCT FROM OLD.start_time THEN
     appointment_starts := NEW.appointment_date + NEW.start_time;
 
-    IF appointment_starts < CURRENT_TIMESTAMP + INTERVAL '24 hours' THEN
+    IF appointment_starts < clinic_now + INTERVAL '24 hours' THEN
       RAISE EXCEPTION 'Appointments must be scheduled at least 24 hours in advance.'
         USING ERRCODE = '23514';
     END IF;
@@ -188,6 +189,7 @@ DECLARE
   completed_status_id INT;
   acting_user_id INT;
   updated_count INT := 0;
+  clinic_now TIMESTAMP := CURRENT_TIMESTAMP AT TIME ZONE 'America/Los_Angeles';
 BEGIN
   SELECT status_id INTO scheduled_status_id
   FROM APPOINTMENT_STATUS
@@ -218,7 +220,7 @@ BEGIN
     SELECT appointment_id, status_id AS old_status_id
     FROM APPOINTMENT
     WHERE status_id = scheduled_status_id
-      AND (appointment_date + end_time) <= CURRENT_TIMESTAMP
+      AND (appointment_date + end_time) <= clinic_now
     FOR UPDATE
   ),
   updated AS (
@@ -251,7 +253,7 @@ BEGIN
     acting_user_id,
     numbered.old_status_id,
     completed_status_id,
-    CURRENT_TIMESTAMP,
+    clinic_now,
     'Appointment automatically marked completed after the scheduled end time passed.'
   FROM numbered
   CROSS JOIN next_log;

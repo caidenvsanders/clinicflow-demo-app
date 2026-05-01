@@ -63,7 +63,7 @@ export async function signupAccount(body: Record<string, unknown>) {
     await client.query(
       `INSERT INTO "USER"
        (user_id, first_name, last_name, email, password_hash, phone, role, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP AT TIME ZONE 'America/Los_Angeles')`,
       [
         userId,
         requiredString(body.first_name, "First name"),

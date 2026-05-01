@@ -97,7 +97,7 @@ export async function createUser(body: Record<string, unknown>) {
     const result = await client.query(
       `INSERT INTO "USER"
        (user_id, first_name, last_name, email, password_hash, phone, role, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP AT TIME ZONE 'America/Los_Angeles')
        RETURNING user_id, first_name, last_name, email, phone, role, created_at::text`,
       values
     );
@@ -406,7 +406,7 @@ export async function createAppointment(body: Record<string, unknown>) {
       `INSERT INTO APPOINTMENT
        (appointment_id, patient_id, provider_id, department_id, status_id,
         appointment_date, start_time, end_time, reason, notes, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP AT TIME ZONE 'America/Los_Angeles')
        RETURNING *`,
       [
         appointmentId,
@@ -444,15 +444,36 @@ export async function updateAppointment(body: Record<string, unknown>) {
       status_id: number;
       appointment_date: string;
       start_time: string;
+      end_time: string;
+      patient_id: number;
+      provider_id: number;
+      department_id: number;
+      reason: string | null;
+      notes: string | null;
     }>(
-      "SELECT status_id, appointment_date::text, start_time::text FROM APPOINTMENT WHERE appointment_id = $1",
+      `SELECT status_id, appointment_date::text, start_time::text, end_time::text,
+              patient_id, provider_id, department_id, reason, notes
+       FROM APPOINTMENT
+       WHERE appointment_id = $1`,
       [appointmentId]
     );
     if (!current.rowCount) throw new AppError("Appointment not found.", 404);
 
+    const nextPatientId = intValue(body.patient_id, "Patient ID");
+    const nextDepartmentId = intValue(body.department_id, "Department ID");
+    const nextReason = optionalString(body.reason);
+    const nextNotes = optionalString(body.notes);
     const timingChanged =
       current.rows[0].appointment_date !== appointmentDate ||
-      current.rows[0].start_time.slice(0, 5) !== startTime;
+      current.rows[0].start_time.slice(0, 5) !== startTime ||
+      current.rows[0].end_time.slice(0, 5) !== endTime;
+    const detailsChanged =
+      current.rows[0].patient_id !== nextPatientId ||
+      current.rows[0].provider_id !== providerId ||
+      current.rows[0].department_id !== nextDepartmentId ||
+      (current.rows[0].reason ?? null) !== nextReason ||
+      (current.rows[0].notes ?? null) !== nextNotes;
+    const statusChanged = current.rows[0].status_id !== statusId;
 
     if (timingChanged) {
       if (changedByRole !== "admin") {
@@ -471,19 +492,19 @@ export async function updateAppointment(body: Record<string, unknown>) {
        RETURNING *`,
       [
         appointmentId,
-        intValue(body.patient_id, "Patient ID"),
+        nextPatientId,
         providerId,
-        intValue(body.department_id, "Department ID"),
+        nextDepartmentId,
         statusId,
         appointmentDate,
         startTime,
         endTime,
-        optionalString(body.reason),
-        optionalString(body.notes)
+        nextReason,
+        nextNotes
       ]
     );
 
-    if (current.rows[0].status_id !== statusId) {
+    if (statusChanged) {
       await insertAuditLog(
         client,
         appointmentId,
@@ -491,6 +512,15 @@ export async function updateAppointment(body: Record<string, unknown>) {
         current.rows[0].status_id,
         statusId,
         optionalString(body.change_reason) ?? "Status updated"
+      );
+    } else if (timingChanged || detailsChanged) {
+      await insertAuditLog(
+        client,
+        appointmentId,
+        changedBy,
+        current.rows[0].status_id,
+        statusId,
+        optionalString(body.change_reason) ?? "Appointment details updated"
       );
     }
 
@@ -520,7 +550,7 @@ async function insertAuditLog(
     `INSERT INTO APPOINTMENT_AUDIT_LOG
      (log_id, appointment_id, changed_by, old_status_id, new_status_id,
       change_timestamp, change_reason)
-     VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6)`,
+     VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP AT TIME ZONE 'America/Los_Angeles', $6)`,
     [logId, appointmentId, changedBy, oldStatusId, newStatusId, reason]
   );
 }
@@ -613,7 +643,7 @@ export async function createAuditLog(body: Record<string, unknown>) {
       `INSERT INTO APPOINTMENT_AUDIT_LOG
        (log_id, appointment_id, changed_by, old_status_id, new_status_id,
         change_timestamp, change_reason)
-       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6)
+       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP AT TIME ZONE 'America/Los_Angeles', $6)
        RETURNING *`,
       [
         logId,

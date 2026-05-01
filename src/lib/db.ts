@@ -1,6 +1,7 @@
 import { Pool, PoolClient, QueryResultRow } from "pg";
 
 type GlobalWithPool = typeof globalThis & { healthcarePool?: Pool };
+export const CLINIC_TIME_ZONE = "America/Los_Angeles";
 
 const connectionString =
   process.env.DATABASE_URL ??
@@ -12,7 +13,8 @@ export const pool =
   globalForPool.healthcarePool ??
   new Pool({
     connectionString,
-    max: 10
+    max: 10,
+    options: `-c timezone=${CLINIC_TIME_ZONE}`
   });
 
 if (process.env.NODE_ENV !== "production") {

@@ -4,6 +4,7 @@ import process from "node:process";
 import pg from "pg";
 
 const { Client } = pg;
+const clinicTimeZone = "America/Los_Angeles";
 
 export const databaseUrl =
   process.env.DATABASE_URL ??
@@ -54,7 +55,10 @@ export function assertSafeLocalDatabase(action = "database reset") {
 }
 
 export async function withClient(callback) {
-  const client = new Client({ connectionString: databaseUrl });
+  const client = new Client({
+    connectionString: databaseUrl,
+    options: `-c timezone=${clinicTimeZone}`
+  });
   await client.connect();
   try {
     return await callback(client);
@@ -74,7 +78,10 @@ export async function waitForDatabase() {
   const deadline = Date.now() + 30_000;
   let lastError;
   while (Date.now() < deadline) {
-    const client = new Client({ connectionString: databaseUrl });
+    const client = new Client({
+      connectionString: databaseUrl,
+      options: `-c timezone=${clinicTimeZone}`
+    });
     try {
       await client.connect();
       await client.query("SELECT 1");

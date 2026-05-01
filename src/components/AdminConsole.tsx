@@ -262,17 +262,36 @@ function formatDateShort(value: unknown) {
       });
 }
 
+function parseNaiveDateTime(value: string) {
+  const match = value.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/
+  );
+  if (!match) return null;
+  const [, year, month, day, hour = "0", minute = "0", second = "0"] = match;
+  return new Date(
+    Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second)
+    )
+  );
+}
+
 function formatDateTime(value: unknown) {
   const text = String(value ?? "");
   if (!text) return "—";
-  const date = new Date(text);
+  const date = parseNaiveDateTime(text) ?? new Date(text);
   return Number.isNaN(date.getTime())
     ? text
     : date.toLocaleString(undefined, {
         month: "short",
         day: "numeric",
         hour: "numeric",
-        minute: "2-digit"
+        minute: "2-digit",
+        timeZone: "UTC"
       });
 }
 
