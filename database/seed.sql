@@ -1,0 +1,4 @@
+-- ClinicFlow demo seeding is handled by scripts/seed-data.mjs.
+-- This placeholder exists so the database folder still documents the
+-- schema/seed split, but the active seed workflow now uses scripted,
+-- local-only fictional data generation with safety checks.

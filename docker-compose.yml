@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: healthcare-scheduling-postgres
+    environment:
+      POSTGRES_USER: healthcare
+      POSTGRES_PASSWORD: healthcare
+      POSTGRES_DB: healthcare_scheduling
+      TZ: America/Los_Angeles
+      PGTZ: America/Los_Angeles
+    ports:
+      - "5433:5432"
+    volumes:
+      - healthcare_scheduling_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U healthcare -d healthcare_scheduling"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  appointment-scheduler:
+    image: postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: healthcare
+      TZ: America/Los_Angeles
+      PGTZ: America/Los_Angeles
+    command: >
+      sh -c "
+        while true; do
+          psql postgresql://healthcare:healthcare@postgres:5432/healthcare_scheduling
+          -c \"SELECT sync_overdue_scheduled_appointments();\" >/dev/null 2>&1;
+          sleep 60;
+        done
+      "
+    restart: unless-stopped
+
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    depends_on:
+      - postgres
+    profiles:
+      - dev
+
+volumes:
+  healthcare_scheduling_data:
